@@ -23,7 +23,7 @@
 %% Available operations:
 %%
 %% GET /Prefix/
-%%   Get information about the luwak interface, in JSON form:
+%%   Get information about the tensors interface, in JSON form:
 %%     {"props":{Prop1:Val1,Prop2:Val2,...},
 %%      "keys":[Key1,Key2,...]}.
 %%   Each property will be included in the "props" object.
@@ -70,20 +70,20 @@
 %%
 %% Webmachine dispatch lines for this resource should look like:
 %%
-%%  {["luwak"],
-%%   luwak_wm_file,
-%%   [{prefix, "luwak"}
+%%  {["tensors"],
+%%   tensors_wm_file,
+%%   [{prefix, "tensors"}
 %%   ]}.
-%%  {["luwak", key],
-%%   luwak_wm_file,
-%%   [{prefix, "luwak"}
+%%  {["tensors", key],
+%%   tensors_wm_file,
+%%   [{prefix, "tensors"}
 %%   ]}.
 %%
 %% These example dispatch lines will expose this resource at
-%% /luwak/ and /luwak/Key.  The resource will attempt to
+%% /tensors/ and /tensors/Key.  The resource will attempt to
 %% connect to Riak on the same Erlang node one which the resource
 %% is executing.
--module(luwak_wm_file).
+-module(tensors_wm_file).
 -author('Bryan Fink <bryan@basho.com>').
 
 %% webmachine resource exports
@@ -121,11 +121,11 @@
 
 -include_lib("webmachine/include/webmachine.hrl").
 -include_lib("riak_kv/src/riak_kv_wm_raw.hrl").
--include("luwak.hrl").
+-include("tensors.hrl").
 
 -define(HEAD_RANGE, "Range").
 -define(HEAD_CRANGE, "Content-Range").
--define(HEAD_BLOCK_SZ, "X-Luwak-Block-Size").
+-define(HEAD_BLOCK_SZ, "X-Tensors-Block-Size").
 
 %% @spec init(proplist()) -> {ok, context()}
 %% @doc Initialize this resource.  This function extracts the
@@ -331,7 +331,7 @@ defined_attribute(Ctx0, Attr) ->
     Ctx = ensure_handle(Ctx0),
     case Ctx#ctx.handle of
         {ok, H} ->
-            As = luwak_file:get_attributes(H),
+            As = tensors_file:get_attributes(H),
             case dict:find(Attr, As) of
                 {ok, A} ->
                     {A, Ctx};
@@ -346,7 +346,7 @@ file_property(RD, Ctx0, Prop, Default) ->
     Ctx = ensure_handle(Ctx0),
     case Ctx#ctx.handle of
         {ok, H} ->
-            case luwak_file:get_property(H, Prop) of
+            case tensors_file:get_property(H, Prop) of
                 undefined ->
                     {Default, RD, Ctx};
                 P ->
@@ -437,7 +437,7 @@ produce_toplevel_body(RD, Ctx=#ctx{client=C}) ->
                 Props = [{<<"o_bucket">>, ?O_BUCKET},
                          {<<"n_bucket">>, ?N_BUCKET},
                          {<<"block_default">>,
-                         luwak_file:get_default_block_size()}],
+                         tensors_file:get_default_block_size()}],
                 [{?JSON_PROPS, {struct, Props}}]
         end,
     KeyPart =
@@ -514,37 +514,37 @@ accept_doc_body(RD, Ctx=#ctx{key=K, client=C, file_props=FP}) ->
     H0 = case Ctx#ctx.handle of
              {ok, H} -> H;
              _ ->
-                 {ok, H} = luwak_file:create(C, K, FP, dict:new()),
+                 {ok, H} = tensors_file:create(C, K, FP, dict:new()),
                  H
          end,
-    {ok,H1} = luwak_file:set_attributes(C, H0, UserMetaMD),
+    {ok,H1} = tensors_file:set_attributes(C, H0, UserMetaMD),
     HCtx = Ctx#ctx{handle={ok,H1}},
     {accept_streambody(RD, HCtx), RD, HCtx}.
 
 accept_streambody(RD, #ctx{handle={ok, H}, client=C, method=Method}) ->
     Offset = case Method of
-		 'POST' -> luwak_file:length(C,H);
+		 'POST' -> tensors_file:length(C,H);
 		 _ ->0
 	     end,
-    Stream = luwak_put_stream:start_link(C, H, Offset, 1000),
-    Size = luwak_file:get_default_block_size(),
+    Stream = tensors_put_stream:start_link(C, H, Offset, 1000),
+    Size = tensors_file:get_default_block_size(),
     {H2, Count} = accept_streambody1(Stream, 0, wrq:stream_req_body(RD, Size)),
-    H2Len = luwak_file:length(C, H2),
+    H2Len = tensors_file:length(C, H2),
     %% truncate will fail if passed a Start >= the length of the file
     if Count < H2Len ->
-            {ok, _} = luwak_io:truncate(C, H2, Count),
+            {ok, _} = tensors_io:truncate(C, H2, Count),
             true;
        true -> true
     end.
 
 accept_streambody1(Stream, Count0, {Data, Next}) ->
     Count = Count0+size(Data),
-    luwak_put_stream:send(Stream, Data),
+    tensors_put_stream:send(Stream, Data),
     if is_function(Next) ->
             accept_streambody1(Stream, Count, Next());
        Next =:= done ->
-            luwak_put_stream:close(Stream),
-            {ok, File} = luwak_put_stream:status(Stream, ?TIMEOUT_DEFAULT),
+            tensors_put_stream:close(Stream),
+            {ok, File} = tensors_put_stream:status(Stream, ?TIMEOUT_DEFAULT),
             {File, Count}
     end.
 
@@ -578,12 +578,12 @@ extract_user_meta(RD) ->
 %% @doc Extract the value of the document, and place it in the response
 %%      body of the request.
 produce_doc_body(RD, Ctx=#ctx{handle={ok, H}, client=C}) ->
-    {{stream, luwak_file:length(C, H), file_sender(C, H)},
+    {{stream, tensors_file:length(C, H), file_sender(C, H)},
      add_user_metadata(RD, H),
      Ctx}.
 
 add_user_metadata(RD, Handle) ->
-    Attr = luwak_file:get_attributes(Handle),
+    Attr = tensors_file:get_attributes(Handle),
     case dict:find(?MD_USERMETA, Attr) of
         {ok, UserMeta} ->
             lists:foldl(fun({K,V},Acc) ->
@@ -596,8 +596,8 @@ add_user_metadata(RD, Handle) ->
 file_sender(C, H) ->
     fun(Start, End) ->
             %% HTTP specifies the last byte to send,
-            %% but luwak wants a number of bytes after offset
-            Stream = luwak_get_stream:start(C, H, Start, 1+End-Start),
+            %% but tensors wants a number of bytes after offset
+            Stream = tensors_get_stream:start(C, H, Start, 1+End-Start),
             (send_file_helper(Stream))()
     end.
 
@@ -605,7 +605,7 @@ file_sender(C, H) ->
 
 send_file_helper(Stream) ->
     fun() ->
-            case luwak_get_stream:recv(Stream, ?STREAM_TIMEOUT) of
+            case tensors_get_stream:recv(Stream, ?STREAM_TIMEOUT) of
                 {Data, _Offset} when is_binary(Data) ->
                     {Data, send_file_helper(Stream)};
                 eos ->
@@ -619,18 +619,18 @@ send_file_helper(Stream) ->
 
 %% @spec ensure_handle(context()) -> context()
 %% @doc Ensure that the 'handle' field of the context() has been filled
-%%      with the result of a luwak_file:get request.  This is a
+%%      with the result of a tensors_file:get request.  This is a
 %%      convenience for memoizing the result of a get so it can be
 %%      used in multiple places in this resource, without having to
 %%      worry about the order of executing of those places.
 ensure_handle(Ctx=#ctx{handle=undefined, key=K, client=C}) ->
-    Ctx#ctx{handle=luwak_file:get(C, K)};
+    Ctx#ctx{handle=tensors_file:get(C, K)};
 ensure_handle(Ctx) -> Ctx.
 
 %% @spec delete_resource(reqdata(), context()) -> {true, reqdata(), context()}
 %% @doc Delete the document specified.
 delete_resource(RD, Ctx=#ctx{key=K, client=C}) ->
-    case luwak_file:delete(C, K) of
+    case tensors_file:delete(C, K) of
         {error, precommit_fail} ->
             {{halt, 403}, send_precommit_error(RD, undefined), Ctx};
         {error, {precommit_fail, Reason}} ->

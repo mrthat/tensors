@@ -1,6 +1,6 @@
--module(luwak_block).
+-module(tensors_block).
 
--include("luwak.hrl").
+-include("tensors.hrl").
 
 -export([create/2,
          data/1,

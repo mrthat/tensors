@@ -1,10 +1,10 @@
--module(luwak_put_stream).
+-module(tensors_put_stream).
 
 -define(BUFFER_SIZE, 20).
 -record(state, {file,offset,blocksize,ref,ttl,written=[],buffer=[],
                 buffersize=0,checksumming=false,ctx=crypto:sha_init()}).
 
--include("luwak.hrl").
+-include("tensors.hrl").
 
 %% API
 -export([start_link/4,
@@ -15,7 +15,7 @@
          status/2,
          flush/1]).
 
-%% @spec start_link(Riak :: riak(), File :: luwak_file(),
+%% @spec start_link(Riak :: riak(), File :: tensors_file(),
 %%                  Offset :: int(), TTL :: int()) ->
 %%        put_stream()
 %% @doc Starts a stream for writing at the specified offset.  The
@@ -27,8 +27,8 @@
 %% @equiv start(Riak, File, Offset, TTL)
 start_link(Riak, File, Offset, TTL) ->
     Ref = make_ref(),
-    BlockSize = luwak_file:get_property(File, block_size),
-    Checksumming = luwak_file:get_property(File, checksumming),
+    BlockSize = tensors_file:get_property(File, block_size),
+    Checksumming = tensors_file:get_property(File, checksumming),
     Pid = proc_lib:spawn_link(
             fun() ->
                     recv(Riak, #state{file=File,offset=Offset,
@@ -39,8 +39,8 @@ start_link(Riak, File, Offset, TTL) ->
 
 start(Riak, File, Offset, TTL) ->
     Ref = make_ref(),
-    BlockSize = luwak_file:get_property(File, block_size),
-    Checksumming = luwak_file:get_property(File, checksumming),
+    BlockSize = tensors_file:get_property(File, block_size),
+    Checksumming = tensors_file:get_property(File, checksumming),
     Pid = proc_lib:spawn(
             fun() ->
                     recv(Riak, #state{file=File,offset=Offset,
@@ -130,7 +130,7 @@ handle_data(Riak, State=#state{file=File,offset=Offset,blocksize=BlockSize,
     PartialSize = BlockSize - Offset rem BlockSize,
     <<PartialData:PartialSize/binary, TailData/binary>> =
         iolist_to_binary(lists:reverse(Buffer)),
-    {ok, [W]} = luwak_io:no_tree_put_range(Riak, File, Offset, PartialData),
+    {ok, [W]} = tensors_io:no_tree_put_range(Riak, File, Offset, PartialData),
     update_tree(Riak, checksum(PartialData,
                                State#state{offset=Offset+PartialSize,
                                            buffer=[TailData],
@@ -145,7 +145,7 @@ handle_data(Riak, State=#state{file=File,offset=Offset,blocksize=BlockSize,
     <<PartialData:PartialSize/binary, TailData/binary>> =
         iolist_to_binary(lists:reverse(Buffer)),
     {ok, Written1} =
-        luwak_io:no_tree_put_range(Riak, File, Offset, PartialData),
+        tensors_io:no_tree_put_range(Riak, File, Offset, PartialData),
     update_tree(Riak, checksum(PartialData,
                                State#state{offset=Offset+PartialSize,
                                            buffer=[TailData],
@@ -156,8 +156,8 @@ handle_data(Riak, State) ->
 
 update_tree(Riak, State=#state{offset=Offset,file=File,written=Written})
   when length(Written) >= ?BUFFER_SIZE ->
-    OriginalOffset = Offset - luwak_tree_utils:blocklist_length(Written),
-    {ok, NewFile} = luwak_tree:update(Riak, File, OriginalOffset, Written),
+    OriginalOffset = Offset - tensors_tree_utils:blocklist_length(Written),
+    {ok, NewFile} = tensors_tree:update(Riak, File, OriginalOffset, Written),
     update_checksum(Riak, State#state{file=NewFile});
 update_tree(_Riak, State) ->
     State.
@@ -166,8 +166,8 @@ flush(Riak, State=#state{offset=Offset,file=File,buffer=Buffer,written=Written})
   when length(Buffer) > 0 ->
     ?debugFmt("A flush(Riak, ~p)~n", [State]),
     Data = iolist_to_binary(lists:reverse(Buffer)),
-    {ok, Written1} = luwak_io:no_tree_put_range(Riak, File, Offset, Data),
-    WriteSize = luwak_tree_utils:blocklist_length(Written1),
+    {ok, Written1} = tensors_io:no_tree_put_range(Riak, File, Offset, Data),
+    WriteSize = tensors_tree_utils:blocklist_length(Written1),
     flush(Riak, checksum(Data, State#state{offset=Offset+WriteSize,
                                            buffer=[],
                                            buffersize=0,
@@ -175,9 +175,9 @@ flush(Riak, State=#state{offset=Offset,file=File,buffer=Buffer,written=Written})
 flush(Riak, State=#state{offset=Offset,file=File,written=Written,blocksize=BlockSize})
   when length(Written) > 0 ->
     ?debugFmt("B flush(Riak, ~p)~n", [State]),
-    OriginalOffset = Offset - luwak_tree_utils:blocklist_length(Written),
+    OriginalOffset = Offset - tensors_tree_utils:blocklist_length(Written),
     OriginalOffsetAligned = OriginalOffset - OriginalOffset rem BlockSize,  
-    {ok, NewFile} = luwak_tree:update(Riak, File, OriginalOffsetAligned, Written),
+    {ok, NewFile} = tensors_tree:update(Riak, File, OriginalOffsetAligned, Written),
     update_checksum(Riak, State#state{file=NewFile});
 flush(_Riak, State) ->
     State.
@@ -190,7 +190,7 @@ checksum(Data, State=#state{ctx=Ctx}) ->
 update_checksum(_, State=#state{checksumming=false}) ->
     State;
 update_checksum(Riak, State=#state{ctx=Ctx,file=File}) ->
-    {ok, File1} = luwak_file:update_checksum(Riak,File,
+    {ok, File1} = tensors_file:update_checksum(Riak,File,
                                             fun() -> crypto:sha_final(Ctx) end),
     State#state{file=File1}.
 

@@ -1,6 +1,6 @@
--module(luwak_tree_utils).
+-module(tensors_tree_utils).
 
--include("luwak.hrl").
+-include("tensors.hrl").
 
 -export([longest_divisable_subtree/2,
          longest_divisable_subtree/4, 

@@ -1,4 +1,4 @@
--module(luwak_file).
+-module(tensors_file).
 
 -export([create/3,
          create/4,
@@ -14,11 +14,11 @@
          name/1,
          length/2]).
 
--include("luwak.hrl").
+-include("tensors.hrl").
 
 %% @spec create(Riak :: riak(), Name :: binary(), Attributes :: dict())
-%%        -> {ok, File :: luwak_file()}
-%% @doc Create a luwak file handle with the given name and attributes.  Will
+%%        -> {ok, File :: tensors_file()}
+%% @doc Create a tensors file handle with the given name and attributes.  Will
 %%      overwrite an existing file of the same name.
 %% @equiv create(Riak, Name, [], Attributes)
 create(Riak, Name, Attributes) when is_binary(Name) ->
@@ -26,8 +26,8 @@ create(Riak, Name, Attributes) when is_binary(Name) ->
 
 %% @spec create(Riak :: riak(), Name :: binary(), Properties :: proplist(),
 %%              Attributes :: dict())
-%%        -> {ok, File :: luwak_file()}
-%% @doc Create a luwak file handle with the given name and attributes.
+%%        -> {ok, File :: tensors_file()}
+%% @doc Create a tensors file handle with the given name and attributes.
 %%      Recognized properties:
 %%      {block_size, int()}       - The maximum size of an individual data chunk
 %%                                   in bytes.  Default is 1000000.
@@ -61,7 +61,7 @@ create(Riak, Name, Properties, Attributes) when is_binary(Name) ->
     Obj = riak_object:new(?O_BUCKET, Name, Value),
     Riak:put(Obj, 2, 2, ?TIMEOUT_DEFAULT, [{returnbody, true}]).
 
-%% @spec set_attributes(Riak :: riak(), Obj :: luwak_file(),
+%% @spec set_attributes(Riak :: riak(), Obj :: tensors_file(),
 %%                      Attributes :: dict())
 %%        -> {ok, NewFile}
 %% @doc Sets the new attributes, saves them, and returns a new file handle.
@@ -71,7 +71,7 @@ set_attributes(Riak, Obj, Attributes) ->
     Obj2 = riak_object:update_value(Obj, Value),
     Riak:put(Obj2, 2, 2, ?TIMEOUT_DEFAULT, [{returnbody, true}]).
   
-%% @spec get_attributes(Obj :: luwak_file()) -> dict()
+%% @spec get_attributes(Obj :: tensors_file()) -> dict()
 %% @doc Gets the attribute dictionary from the file handle.
 get_attributes(Obj) ->
     proplists:get_value(attributes, riak_object:get_value(Obj)).
@@ -86,24 +86,24 @@ exists(Riak, Name) ->
         Err -> Err
     end.
   
-%% @spec length(Riak :: riak(), File :: luwak_file()) -> Length
+%% @spec length(Riak :: riak(), File :: tensors_file()) -> Length
 %% @doc returns the length in bytes of the file.
 length(Riak, File) ->
     case get_property(File, root) of
         undefined ->
             0;
         RootName ->
-            {ok, Node} = luwak_tree:get(Riak, RootName),
+            {ok, Node} = tensors_tree:get(Riak, RootName),
             case Node of
                 #n{children=Children} ->
-                    luwak_tree_utils:blocklist_length(Children);
+                    tensors_tree_utils:blocklist_length(Children);
                 Block ->
-                    byte_size(luwak_block:data(Block))
+                    byte_size(tensors_block:data(Block))
             end
     end.
 
 %% @spec delete(Riak :: riak(), Name :: binary()) -> ok | {error, Reason}
-%% @doc deletes the named file from luwak.  This is a fast operation since
+%% @doc deletes the named file from tensors.  This is a fast operation since
 %%      the blocks and tree for that file remain untouched.  A GC operation
 %%      (not yet implemented) will be required to clean them up properly.
 delete(Riak, Name) ->
@@ -114,7 +114,7 @@ delete(Riak, Name) ->
 get(Riak, Name) ->
     Riak:get(?O_BUCKET, Name, 2).
 
-%% @spec get_property(Obj :: luwak_file(), PropName :: atom()) -> Property
+%% @spec get_property(Obj :: tensors_file(), PropName :: atom()) -> Property
 %% @doc retrieves the named property from the filehandle.
 get_property(Obj, type) ->
     case riak_object:get_value(Obj) of
@@ -133,7 +133,7 @@ get_property(Obj, PropName) ->
     end.
 
 get_default_block_size() ->
-    app_helper:get_env(luwak, default_block_size, ?BLOCK_DEFAULT).
+    app_helper:get_env(tensors, default_block_size, ?BLOCK_DEFAULT).
 
 %% @private
 update_root(Riak, Obj, NewRoot) ->
@@ -159,7 +159,7 @@ update_checksum(Riak, Obj, ChecksumFun) ->
             {ok, Obj}
   end.
 
-%% @spec name(Obj :: luwak_file()) -> binary()
+%% @spec name(Obj :: tensors_file()) -> binary()
 %% @doc returns the name of the given file handle.
 name(Obj) ->
     riak_object:key(Obj).

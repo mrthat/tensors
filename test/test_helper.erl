@@ -49,7 +49,7 @@ start_riak() ->
     error_logger:delete_report_handler(error_logger_tty_h),
     _ = application:load(sasl),
     put(old_sasl_l, app_helper:get_env(sasl, sasl_error_logger)),
-    LogFile = "./luwak-eunit-sasl.log",
+    LogFile = "./tensors-eunit-sasl.log",
     ok = application:set_env(sasl, sasl_error_logger, {file, LogFile}),
     application:start(sasl),
     error_logger:delete_report_handler(sasl_report_tty_h),

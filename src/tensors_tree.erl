@@ -1,4 +1,4 @@
--module(luwak_tree).
+-module(tensors_tree).
 
 -export([update/4,
          get/2,
@@ -9,27 +9,27 @@
          truncate/7,
          truncate/1]).
 
--include("luwak.hrl").
+-include("tensors.hrl").
 
 %%=======================================
 %% Public API
 %%=======================================
 
 update(Riak, File, StartingPos, Blocks) ->
-    Order = luwak_file:get_property(File, tree_order),
-    BlockSize = luwak_file:get_property(File, block_size),
+    Order = tensors_file:get_property(File, tree_order),
+    BlockSize = tensors_file:get_property(File, block_size),
     if
         StartingPos rem BlockSize =/= 0 ->
             throw({error, ?fmt("StartingPos (~p) must be a multiple of blocksize", [StartingPos])});
         true ->
             ok
     end,
-    case luwak_file:get_property(File, root) of
+    case tensors_file:get_property(File, root) of
         %% there is no root, therefore we create one
         undefined -> 
             {ok, RootObj} = create_tree(Riak, Order, Blocks),
             RootName = riak_object:key(RootObj),
-            luwak_file:update_root(Riak, File, RootName);
+            tensors_file:update_root(Riak, File, RootName);
         RootName ->
             {ok, Root} = get(Riak, RootName),
             ?debugMsg("blocks~n"),
@@ -37,7 +37,7 @@ update(Riak, File, StartingPos, Blocks) ->
             {ok, NewRoot} = subtree_update(Riak, File, Order, StartingPos, 0, 
                                            Root, Blocks),
             NewRootName = riak_object:key(NewRoot),
-            luwak_file:update_root(Riak, File, NewRootName)
+            tensors_file:update_root(Riak, File, NewRootName)
     end.
 
 get_range(Riak, Parent, BlockSize, TreeStart, Start, End) ->
@@ -67,13 +67,13 @@ get_range(_Riak, Fun, _Parent = #n{children=[{_,BlockSize}|_]=Children},
     ?debugFmt("A get_range(Riak, ~p, ~p, ~p, ~p, ~p)~n",
               [_Parent, BlockSize, TreeStart, Start, End]),
     {Nodes, Length} = read_split(Children, TreeStart, Start, End),
-    luwak_tree_utils:foldrflatmap(Fun, Nodes, Length);
+    tensors_tree_utils:foldrflatmap(Fun, Nodes, Length);
 get_range(_Riak, Fun, _Parent = #n{children=Children}, _BlockSize, TreeStart,
           Start, End) ->
     ?debugFmt("B get_range(Riak, ~p, ~p, ~p, ~p, ~p)~n",
               [_Parent, _BlockSize, TreeStart, Start, End]),
     {Nodes, Length} = read_split(Children, TreeStart, Start, End),
-    luwak_tree_utils:foldrflatmap(Fun, Nodes, Length).
+    tensors_tree_utils:foldrflatmap(Fun, Nodes, Length).
 
 truncate(_Riak, _File, _Start, undefined, _Order, _NodeOffset, _BlockSize) ->
     ?debugFmt("A truncate(Riak, File, ~p, undefined, ~p, ~p, ~p)~n",
@@ -85,21 +85,21 @@ truncate(Riak, File, Start, _Parent=#n{children=Children},
               [Start,_Parent,Order,NodeOffset,BlockSize]),
     {Keep, {Recurse,_RecLength}, _} = which_child(Children, NodeOffset,
                                                   Start, []),
-    KeepLength = luwak_tree_utils:blocklist_length(Keep),
+    KeepLength = tensors_tree_utils:blocklist_length(Keep),
     {ok, SubNode} = get(Riak, Recurse),
     {ok, NN} = truncate(Riak, File, Start, SubNode, Order,
                         NodeOffset+KeepLength, BlockSize),
     {ok, NewNode} = create_tree(Riak, Order, Keep ++ [NN]),
     NewNodeVal = riak_object:get_value(NewNode),
     {ok, {riak_object:key(NewNode),
-          luwak_tree_utils:blocklist_length(NewNodeVal#n.children)}};
+          tensors_tree_utils:blocklist_length(NewNodeVal#n.children)}};
 truncate(Riak, _File, Start, Block, _Order, NodeOffset, _BlockSize) ->
     ?debugFmt("C truncate(Riak, File, ~p, ~p, ~p, ~p, ~p)~n",
               [Start, Block, _Order, NodeOffset, _BlockSize]),
-    Data = luwak_block:data(Block),
+    Data = tensors_block:data(Block),
     ByteOffset = Start - NodeOffset,
     <<Retain:ByteOffset/binary, _/binary>> = Data,
-    {ok, NewBlock} = luwak_block:create(Riak, Retain),
+    {ok, NewBlock} = tensors_block:create(Riak, Retain),
     {ok, {riak_object:key(NewBlock), ByteOffset}}.
 
 read_split(Children, TreeStart, Start, End) when Start < 0 ->
@@ -109,10 +109,10 @@ read_split(Children, TreeStart, Start, End) ->
               [Children, TreeStart, Start, End]),
     InsidePos = Start - TreeStart,
     InsideEnd = End - TreeStart,
-    {Head,Tail} = luwak_tree_utils:split_at_length(Children, InsidePos),
-    {Middle,_} = luwak_tree_utils:split_at_length_left_bias(Tail, InsideEnd),
+    {Head,Tail} = tensors_tree_utils:split_at_length(Children, InsidePos),
+    {Middle,_} = tensors_tree_utils:split_at_length_left_bias(Tail, InsideEnd),
     ?debugFmt("middle ~p~n", [Middle]),
-    {Middle, luwak_tree_utils:blocklist_length(Head)+TreeStart}.
+    {Middle, tensors_tree_utils:blocklist_length(Head)+TreeStart}.
 
 get(Riak, Name) when is_binary(Name) ->
     {ok, Obj} = Riak:get(?N_BUCKET, Name, 2),
@@ -120,11 +120,11 @@ get(Riak, Name) when is_binary(Name) ->
 
 visualize_tree(Riak, RootName) ->
     {ok, Node} = get(Riak, RootName),
-    [<<"digraph Luwak_Tree {\n">>,
+    [<<"digraph Tensors_Tree {\n">>,
      <<"# page = \"8.2677165,11.692913\" ;\n">>,
      <<"ratio = \"auto\" ;\n">>,
      <<"mincross = 2.0 ;\n">>,
-     <<"label = \"Luwak Tree\" ;\n">>,
+     <<"label = \"Tensors Tree\" ;\n">>,
      visualize_tree(Riak, RootName, Node),
      <<"}">>].
 
@@ -143,7 +143,7 @@ visualize_tree(Riak, RootName = <<Prefix:8/binary, _/binary>>,
                                         [RootName,ChildName,Length])
                   end, Children);
 visualize_tree(_Riak, DataName = <<Prefix:8/binary, _/binary>>, DataNode) ->
-    Data = luwak_block:data(DataNode),
+    Data = tensors_block:data(DataNode),
     PrefixData = if
                      byte_size(Data) > 8 ->
                          <<P:8/binary, _/binary>> = Data,
@@ -170,12 +170,12 @@ create_tree(Riak, Order, Children) when is_list(Children) ->
 subtree_update(Riak, File, Order, InsertPos, TreePos, Parent = #n{}, Blocks) ->
     ?debugFmt("subtree_update(Riak, File, ~p, ~p, ~p, ~p, ~p)~n",
               [Order, InsertPos, TreePos, Parent, truncate(Blocks)]),
-    {NodeSplit, BlockSplit} = luwak_tree_utils:five_way_split(TreePos, 
+    {NodeSplit, BlockSplit} = tensors_tree_utils:five_way_split(TreePos, 
                                                               Parent#n.children,
                                                               InsertPos,
                                                               Blocks),
     ?debugFmt("NodeSplit ~p BlockSplit ~p~n", [NodeSplit, BlockSplit]),
-    MidHeadStart = luwak_tree_utils:blocklist_length(NodeSplit#split.head) +
+    MidHeadStart = tensors_tree_utils:blocklist_length(NodeSplit#split.head) +
         TreePos,
     ?debugMsg("midhead~n"),
     MidHeadReplacement =
@@ -189,15 +189,15 @@ subtree_update(Riak, File, Order, InsertPos, TreePos, Parent = #n{}, Blocks) ->
                                                       BlockSplit#split.midhead),
                   V = riak_object:get_value(ReplacementChild),
                   {riak_object:key(ReplacementChild),
-                   luwak_tree_utils:blocklist_length(V#n.children)}
+                   tensors_tree_utils:blocklist_length(V#n.children)}
           end,
           NodeSplit#split.midhead),
-    MiddleInsertStart = luwak_tree_utils:blocklist_length(
+    MiddleInsertStart = tensors_tree_utils:blocklist_length(
                                   BlockSplit#split.midhead) + MidHeadStart,
     ?debugMsg("middle~n"),
     MiddleReplacement = list_into_nodes(Riak, BlockSplit#split.middle, Order,
                                         MiddleInsertStart),
-    MidTailStart = luwak_tree_utils:blocklist_length(BlockSplit#split.middle) +
+    MidTailStart = tensors_tree_utils:blocklist_length(BlockSplit#split.middle) +
         MiddleInsertStart,
     ?debugMsg("midtail~n"),
     MidTailReplacement =
@@ -211,7 +211,7 @@ subtree_update(Riak, File, Order, InsertPos, TreePos, Parent = #n{}, Blocks) ->
                                                       BlockSplit#split.midtail),
                   V = riak_object:get_value(ReplacementChild),
                   {riak_object:key(ReplacementChild),
-                   luwak_tree_utils:blocklist_length(V#n.children)}
+                   tensors_tree_utils:blocklist_length(V#n.children)}
           end,
           NodeSplit#split.midtail),
     ?debugMsg("end~n"),
@@ -228,7 +228,7 @@ list_into_nodes(Riak, Children, Order, StartingPos) ->
                 fun([{SubNode,Length}]) ->
                         {SubNode,Length};
                    (Sublist) ->
-                        Length = luwak_tree_utils:blocklist_length(Sublist),
+                        Length = tensors_tree_utils:blocklist_length(Sublist),
                         {ok, Obj} = create_node(Riak, Sublist),
                         {riak_object:key(Obj), Length}
                 end,
@@ -241,13 +241,13 @@ list_into_nodes(Riak, Children, Order, StartingPos) ->
             Written
     end.
 
-%% @spec block_at(Riak::riak(), File::luwak_file(), Pos::int()) ->
+%% @spec block_at(Riak::riak(), File::tensors_file(), Pos::int()) ->
 %%          {ok, BlockObj::riak_object:riak_object()} | {error, Reason}
 -spec block_at(term(), term(), non_neg_integer()) ->
                       {ok, BlockObj::riak_object:riak_object()} | 
                       {ok, undefined} | {error, Reason::term()}.
 block_at(Riak, File, Pos) ->
-    case luwak_file:get_property(File, root) of
+    case tensors_file:get_property(File, root) of
         undefined -> {error, notfound};
         RootName -> block_at_retr(Riak, RootName, 0, Pos)
     end.
@@ -255,8 +255,8 @@ block_at(Riak, File, Pos) ->
 block_at_retr(Riak, NodeName, NodeOffset, Pos) ->
     case Riak:get(?N_BUCKET, NodeName, 2) of
         {ok, NodeObj} ->
-            Type = luwak_file:get_property(NodeObj, type),
-            Links = luwak_file:get_property(NodeObj, links),
+            Type = tensors_file:get_property(NodeObj, type),
+            Links = tensors_file:get_property(NodeObj, links),
             block_at_node(Riak, NodeObj, Type, Links, NodeOffset, Pos);
         Err ->
             Err
@@ -267,7 +267,7 @@ block_at_node(Riak, _NodeObj, node, Links, NodeOffset, Pos) ->
         {Head, {ChildName,_}, _} ->
             block_at_retr(Riak,
                           ChildName,
-                          NodeOffset+luwak_tree_utils:blocklist_length(Head),
+                          NodeOffset+tensors_tree_utils:blocklist_length(Head),
                           Pos);
         {_, undefined, _} ->
             {ok, undefined}

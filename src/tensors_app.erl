@@ -1,4 +1,4 @@
--module(luwak_app).
+-module(tensors_app).
 
 -behaviour(application).
 
@@ -10,9 +10,9 @@
 %% ===================================================================
 
 start(_StartType, _StartArgs) ->
-    case app_helper:get_env(luwak, enabled, false) of
+    case app_helper:get_env(tensors, enabled, false) of
         true ->
-            riak_core_util:start_app_deps(luwak),
+            riak_core_util:start_app_deps(tensors),
             add_webmachine_routes();
         _ ->
             nop
@@ -23,8 +23,8 @@ stop(_State) ->
     ok.
 
 add_webmachine_routes() ->
-    Name = app_helper:get_env(luwak, prefix, "luwak"),
+    Name = app_helper:get_env(tensors, prefix, "tensors"),
     Props = [{prefix, Name}],
     [ webmachine_router:add_route(R)
-      || R <- [{[Name, key], luwak_wm_file, Props},
-               {[Name],      luwak_wm_file, Props}] ].
+      || R <- [{[Name, key], tensors_wm_file, Props},
+               {[Name],      tensors_wm_file, Props}] ].

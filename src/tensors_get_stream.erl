@@ -1,4 +1,4 @@
--module(luwak_get_stream).
+-module(tensors_get_stream).
 
 -export([start/4,
          recv/2,
@@ -6,9 +6,9 @@
 
 -record(map, {riak,blocksize,ref,pid,offset,endoffset}).
 
--include("luwak.hrl").
+-include("tensors.hrl").
 
-%% @spec start(Riak :: riak(), File :: luwak_file(),
+%% @spec start(Riak :: riak(), File :: tensors_file(),
 %%             Start :: int(), Length :: length()) ->
 %%        get_stream()
 %% @doc Creates and returns a handle to a streaming get.  Initiating
@@ -16,8 +16,8 @@
 %%      delivered as a set of messages to the calling process.
 start(Riak, File, Start, Length) ->
     Ref = make_ref(),
-    BlockSize = luwak_file:get_property(File, block_size),
-    Root = luwak_file:get_property(File, root),
+    BlockSize = tensors_file:get_property(File, block_size),
+    Root = tensors_file:get_property(File, root),
     MapStart = [{{?N_BUCKET, Root}, 0}],
     Map = #map{riak=Riak,blocksize=BlockSize,ref=Ref,
                offset=Start,endoffset=Start+Length},
@@ -102,7 +102,7 @@ map(Parent=#n{}, TreeOffset,
     Fun = fun({Name,Length},AccOffset) ->
                   {[{{?N_BUCKET, Name}, AccOffset}], AccOffset+Length}
           end,
-    Blocks = luwak_tree:get_range(Riak, Fun, Parent, BlockSize,
+    Blocks = tensors_tree:get_range(Riak, Fun, Parent, BlockSize,
                                   TreeOffset, Offset, EndOffset),
     case Blocks of
         [] ->
@@ -121,7 +121,7 @@ BlockSize})
   when TreeOffset < Offset ->
     ?debugFmt("B map(~p, ~p, ~p)~n", [Block, TreeOffset, _Map]),
     PartialSize = Offset - TreeOffset,
-    <<_:PartialSize/binary, Tail/binary>> = luwak_block:data(Block),
+    <<_:PartialSize/binary, Tail/binary>> = tensors_block:data(Block),
     case BlockSize >= EndOffset - TreeOffset of
         %% should be the same as BlockSize >= EndOffset-Offset
         false ->
@@ -142,7 +142,7 @@ map(Block, TreeOffset,
     ?debugFmt("C map(~p, ~p, ~p)~n", [Block, TreeOffset, _Map]),
     case EndOffset - TreeOffset of
         PartialSize when PartialSize > 0 ->
-            <<PartialData:PartialSize/binary, _/binary>> = luwak_block:data(Block),
+            <<PartialData:PartialSize/binary, _/binary>> = tensors_block:data(Block),
             ?debugFmt("sending ~p~n", [{get, Ref, PartialData, TreeOffset}]),
             Pid ! {get, Ref, PartialData, TreeOffset};
         _PartialSize ->
@@ -152,7 +152,7 @@ map(Block, TreeOffset,
     [];
 map(Block, TreeOffset, _Map=#map{ref=Ref,pid=Pid}) ->
     ?debugFmt("D map(~p, ~p, ~p)~n", [Block, TreeOffset, _Map]),
-    Data = luwak_block:data(Block),
+    Data = tensors_block:data(Block),
     ?debugFmt("sending ~p~n", [{get, Ref, Data, TreeOffset}]),
     Pid ! {get, Ref, Data, TreeOffset},
     [].

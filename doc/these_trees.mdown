@@ -1,19 +1,19 @@
 Tree Structure
 ==========
 
-Luwak stores its file data as an immutable hash tree.  Therefore writing to this tree causes new subtrees to be generated rather than mutating the existing tree.  This document describes how reading and writing from these trees will work.
+Tensors stores its file data as an immutable hash tree.  Therefore writing to this tree causes new subtrees to be generated rather than mutating the existing tree.  This document describes how reading and writing from these trees will work.
 
-This document assumes some properties will hold true for luwak trees:
+This document assumes some properties will hold true for tensors trees:
 
-1. Luwak tree nodes are several orders of magnitude smaller than tree leaves (data blocks) in terms of memory consumption
+1. Tensors tree nodes are several orders of magnitude smaller than tree leaves (data blocks) in terms of memory consumption
 2. The probability of a hash conflict is so small that the occurrence of one must point to the existence of a malevolent personal deity.
 
 Tree Writing
 ==========
 
-The interface for luwak allows for writing to the tree with an arbitrary offset and length, like a traditional file API.  This algorithm tries to minimize the copying of existing data within the underlying key-value store.  The reason we attempt to minimize copying is the assumption that higher fragmentation is preferable to the higher bandwidth consumption that would occur during large copies.
+The interface for tensors allows for writing to the tree with an arbitrary offset and length, like a traditional file API.  This algorithm tries to minimize the copying of existing data within the underlying key-value store.  The reason we attempt to minimize copying is the assumption that higher fragmentation is preferable to the higher bandwidth consumption that would occur during large copies.
 
-When luwak accepts a write it will generally come in one of two forms: either a write will be aligned on a block boundary or it will not be aligned on a block boundary.  Luwak is optimized for the case when writes occur on block boundaries.  On block aligned writes, a completely new block will be created.  If the ending block of a write stream is not aligned on a block boundary, then the ending block of the stream is looked up and mutated, then this is stored as the ending block.
+When tensors accepts a write it will generally come in one of two forms: either a write will be aligned on a block boundary or it will not be aligned on a block boundary.  Tensors is optimized for the case when writes occur on block boundaries.  On block aligned writes, a completely new block will be created.  If the ending block of a write stream is not aligned on a block boundary, then the ending block of the stream is looked up and mutated, then this is stored as the ending block.
 
     [  B1  ] [  B2  ] [  B3  ] [  B4  ]
         [       write 1    ]

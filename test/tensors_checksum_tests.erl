@@ -1,4 +1,4 @@
--module(luwak_checksum_tests).
+-module(tensors_checksum_tests).
 
 -ifdef(TEST).
 
@@ -21,19 +21,19 @@ checksum_test_() ->
 one_off_checksum() ->
   test_helper:riak_test(fun(Riak) ->
       Sha = crypto:sha(<<"chilled monkey brains">>),
-      {ok, File} = luwak_file:create(Riak, <<"file1">>, [{tree_order,2},{block_size,2}], dict:new()),
-      {ok, _, File1} = luwak_io:put_range(Riak, File, 0, <<"chilled monkey brains">>),
+      {ok, File} = tensors_file:create(Riak, <<"file1">>, [{tree_order,2},{block_size,2}], dict:new()),
+      {ok, _, File1} = tensors_io:put_range(Riak, File, 0, <<"chilled monkey brains">>),
       timer:sleep(100),
-      Checksum = luwak_checksum:sha1(Riak, File1),
+      Checksum = tensors_checksum:sha1(Riak, File1),
       ?assertEqual(Sha, Checksum)
     end).
 
 do_a_simple_checksum() ->
   test_helper:riak_test(fun(Riak) ->
       Sha = crypto:sha(<<"chilled monkey brains">>),
-      {ok, File} = luwak_file:create(Riak, <<"file1">>, [{checksumming,true}], dict:new()),
-      {ok, _, File1} = luwak_io:put_range(Riak, File, 0, <<"chilled monkey brains">>),
-      ?assertEqual({sha1,Sha}, luwak_file:get_property(File1,checksum))
+      {ok, File} = tensors_file:create(Riak, <<"file1">>, [{checksumming,true}], dict:new()),
+      {ok, _, File1} = tensors_io:put_range(Riak, File, 0, <<"chilled monkey brains">>),
+      ?assertEqual({sha1,Sha}, tensors_file:get_property(File1,checksum))
     end).
 
 -endif.
