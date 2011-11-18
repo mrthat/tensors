@@ -2,7 +2,7 @@
 
 A distributed N-dimensional numerical array database built on [Riak][1] and based on [Luwak][2]. It aims to be a distributed datastore with a similar approach as the [HDF Group][3] guys took with [HDF5][4].
 
-> **DISCLAIMER** : This project is not yet ready to be used. Feel free to contribute though, the faster we get that rolling, the better! At the moment, the project is nothing more than a fork of Tensors with increasing changes to make it numeric-aware.
+> **DISCLAIMER** : This project is not yet ready to be used. Feel free to contribute though, the faster we get that rolling, the better! At the moment, the project is nothing more than a fork of Luwak with increasing changes to make it numeric-aware.
 
 [1]: http://www.github.com/basho/riak
 [2]: http://www.github.com/basho/luwak
